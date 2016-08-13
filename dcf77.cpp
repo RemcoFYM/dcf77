@@ -22,6 +22,7 @@
 
 #include "dcf77.h"
 
+boolean and_match = false;
 
 namespace Internal { namespace Debug {
     void debug_helper(char data) { sprint(data == 0? 'S': data == 1? '?': data - 2 + '0', 0); }
@@ -641,14 +642,34 @@ namespace Internal {  // DCF77_Second_Decoder
         }
 
         if (tick_data == DCF77::min_marker) {
-            bounded_increment<50>(this->data[this->tick]);
+            bounded_increment<50>(this->data[this->tick]); //Note PA3FYM: Gavin, 50 bonus points ??? Ah ... well ;-)
             if (this->tick == this->max_index) {
                 prediction_match += 50;
             }
-        } else if (tick_data == DCF77::A0_B0 || tick_data == DCF77::A0_B1 || tick_data == DCF77::A1_B0 || tick_data == DCF77::A1_B1) {
+        } else if (tick_data != DCF77::min_marker || tick_data != DCF77::undefined) {
+
+	    // Note PA3FYM: There is more information than only the minute marker (500ms in the first second)
+	    // available. Bit59 is always 0, as well as bit52.
+
+	    const bool tick_ok = (tick_data == DCF77::A0_B0); // there is a match if tick_data = 100ms --> A0_B0
+	    uint8_t bin = this->tick; // process current tick
+
+ 	    if ((bin == 52 || bin == 59) && tick_ok) {                // enter here for bin52 or bin59
+
+              if (and_match) {                           // if bits 52 AND 59 are both 0, both earn 6 points extra
+                 bounded_increment<6>(this->data[bin]); // this has to be bit 59
+	         bounded_increment<6>(this->data[get_previous_n_tick(52)]); // give bit 52 also extra points
+	         if (bin == this->max_index) prediction_match += 5; // also reward prediction_match when appropriate
+              } // and_match 
+              
+              bounded_increment<2>(this->data[bin]); // add 2 points for a match
+	      and_match = (bin == 52); // 52 is always 7 seconds earlier than 59 ;-)
+
+            } // bin52 or bin59
+
+            if (bin == this->max_index) prediction_match += tick_ok;
 
             // bit 17 is where the convolution kernel starts
-            uint8_t bin = this->tick;
             if (bin<17) bin += seconds_per_minute;
             bin -= 17;
 
